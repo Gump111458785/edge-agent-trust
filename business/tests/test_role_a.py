@@ -1,9 +1,12 @@
 import json
+from time import time
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from fastapi.testclient import TestClient
 import pytest
 
-from business.app.db import connect, write_transaction
+from business.app.db import connect, create_session, initialize, seed, write_transaction
+from business.app.public_booking import create_public_booking_app
 from evaluation.fixtures import Lab
 from evaluation.run_benchmark import TASKS, run_task
 from evaluation.state_evaluator import snapshot, state_matches
@@ -36,6 +39,33 @@ def test_real_booking_and_scoped_read(lab):
                                                           **facts}).json()['visitor_id'] == 'V001'
     assert lab.business.post('/internal/executor/access-grants', json={}).status_code == 404
     assert set(lab.business.get('/tool-openapi.json').json()['paths']) == {'/booking'}
+
+
+def test_public_booking_entrance_only_serves_the_authenticated_tool(tmp_path):
+    url = 'https://booking-staging.example'
+    database = tmp_path / 'campus.sqlite3'
+    now = int(time())
+    initialize(database)
+    seed(database, now)
+    with write_transaction(database) as conn:
+        session = create_session(conn, 'V001', now)
+    app = create_public_booking_app(database, url)
+    with TestClient(app) as public:
+        assert {(route.path, frozenset(route.methods)) for route in app.routes} == {
+            ('/booking', frozenset({'GET'})), ('/tool-openapi.json', frozenset({'GET'})),
+        }
+        schema = public.get('/tool-openapi.json').json()
+        assert schema['servers'] == [{'url': url}]
+        assert set(schema['paths']) == {'/booking'}
+        assert schema['paths']['/booking']['get']['operationId'] == 'query_booking'
+        booking = '/booking?booking_id=BK-1042'
+        assert public.get(booking).status_code == 401
+        headers = {'Authorization': f"Bearer {session['session_token']}"}
+        response = public.get(booking, headers=headers)
+        assert response.json()['status'] == 'confirmed' and response.headers['Cache-Control'] == 'no-store'
+        assert public.get('/booking?booking_id=BK-1043', headers=headers).status_code == 404
+        assert public.get('/internal/bookings/BK-1042', headers=headers).status_code == 404
+        assert public.post('/internal/executor/access-grants', headers=headers).status_code == 404
 
 
 def test_demo_login_is_authenticated_and_stores_only_hash(lab):

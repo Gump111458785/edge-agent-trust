@@ -62,6 +62,22 @@ uvicorn business.app.main:create_executor_app --factory --host 127.0.0.1 --port 
 
 ## 与 E 联调
 
+### 临时公网 HTTPS 验收
+
+在可运行 Cloudflare Tunnel 的测试主机上安装 Python 依赖和 `cloudflared`。macOS 可用 `brew install cloudflared`。从仓库根目录启动。
+
+```bash
+python -m business.app.quick_tunnel
+```
+
+启动器创建单独的合成 SQLite 和访客 `V001` 的一小时会话。它通过公网 HTTPS 验证正常查询、缺少会话、跨访客查询和内部路由隔离后，打印本次 HTTPS 地址、工具定义 URL 和临时 Bearer 会话文件路径。Dify 自定义工具导入打印的 `/tool-openapi.json`，把 `booking-token` 文件中的会话填入 Bearer 凭据，在调试预览中查询 `BK-1042`。
+
+保持启动终端运行。`Ctrl+C` 关闭本次入口并清理临时数据库和会话。重启会分配新地址和会话。若主机已有 Cloudflare 默认隧道配置或无法连接 Cloudflare，使用一台能运行 Quick Tunnel 的测试主机。[Cloudflare Quick Tunnels](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/)
+
+### 自有 HTTPS 入口
+
 `GET /tool-openapi.json` 只发布 `query_booking` 的定义。E 有可达 HTTPS 入口后，将 `ROLE_A_TOOL_BASE_URL` 设置为该入口。反向代理只路由只读 `/booking` 及按需提供的 Schema。Dify 工具凭据填合成访客临时会话。每个真实访客的身份传播由 D 的可信会话链路完成。执行器保持内部监听。当前仓库里的 Dify 应用仍用原预约 Mock，云端换接取决于可达入口和 E 的配置。
+
+可将反向代理的上游设为 `uvicorn business.app.public_booking:create_public_booking_app --factory --host 127.0.0.1 --port 8000`。该进程只注册预约查询和工具定义。内部事实服务和执行器使用各自的内部端口与配置。
 
 Docker 可在仓库根目录用 `docker build -f business/Dockerfile -t edge-agent-trust-a .` 构建。两个服务用独立账户和进程启动。把数据库目录对读服务设为只读，对执行器设为可写，只向相应进程分发服务凭据和验签材料。SQLite 的写隔离依赖文件系统权限及部署身份。`mode=ro` 同时约束读取代码路径。默认容器命令启动读服务，执行器容器重载为 `uvicorn business.app.main:create_executor_app --factory --host 0.0.0.0 --port 8001` 后应留在内部网络。

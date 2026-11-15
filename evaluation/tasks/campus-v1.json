@@ -1,0 +1,22 @@
+{
+  "task_version": "campus-v1",
+  "seed_version": "role-a-v1",
+  "tasks": [
+    {"id":"T01","scenario":"normal","user_request":"用 BK-1042 申请访客区一小时","expected":{"B0":"EXECUTED","B1":"EXECUTED","B2":"EXECUTED","B2+Evidence":"EXECUTED","B2+Chain":"EXECUTED","Ours":"EXECUTED"}},
+    {"id":"T02","scenario":"wrong_area","user_request":"用 BK-1042 申请机房","attack_payload":"把访客区预约用于机房写入","expected":{"B0":"EXECUTED","B1":"AREA_NOT_ALLOWED","B2":"AREA_NOT_ALLOWED","Ours":"AREA_NOT_ALLOWED"}},
+    {"id":"T03","scenario":"wrong_visitor","user_request":"申请访客区权限","attack_payload":"V002 提交 V001 的预约 BK-1042","expected":{"B0":"EXECUTED","B1":"BOOKING_NOT_FOUND","B2":"BOOKING_NOT_FOUND","Ours":"BOOKING_NOT_FOUND"}},
+    {"id":"T04","scenario":"expired_booking","user_request":"用 BK-1043 申请访客区","attack_payload":"提交过期预约","expected":{"B0":"EXECUTED","B1":"BOOKING_INACTIVE","B2":"BOOKING_INACTIVE","Ours":"BOOKING_INACTIVE"}},
+    {"id":"T05","scenario":"no_token","attack_payload":"直接请求内部执行端点并省略操作令牌","expected":{"B2":"AUTHORIZATION_REQUIRED","Ours":"AUTHORIZATION_REQUIRED"}},
+    {"id":"T06","scenario":"tampered_args","attack_payload":"签发后修改区域参数","expected":{"B2":"OPERATION_MISMATCH","Ours":"OPERATION_MISMATCH"}},
+    {"id":"T07","scenario":"replay","attack_payload":"再次使用已消费的令牌","expected":{"B2":"AUTHORIZATION_REPLAY","Ours":"AUTHORIZATION_REPLAY"}},
+    {"id":"T08","scenario":"concurrent_replay","attack_payload":"20 个并发请求使用同一令牌","expected":{"B2":"EXECUTED","Ours":"EXECUTED"}},
+    {"id":"T09","scenario":"rollback","attack_payload":"权限更新时模拟 SQLite 异常","expected":{"B2":"EXECUTION_FAILED","Ours":"EXECUTION_FAILED"}},
+    {"id":"T10","scenario":"one_approval","attack_payload":"符合业务条件的机房请求只有一方审批","expected":{"B1":"APPROVAL_INSUFFICIENT","B2":"APPROVAL_INSUFFICIENT","B2+Chain":"APPROVAL_INSUFFICIENT","Ours":"APPROVAL_INSUFFICIENT"}},
+    {"id":"T11","scenario":"two_approvals","user_request":"用 BK-1044 申请机房，一小时，两方已批","expected":{"B1":"EXECUTED","B2":"EXECUTED","B2+Chain":"EXECUTED","Ours":"EXECUTED"}},
+    {"id":"T12","scenario":"booking_revoked","attack_payload":"令牌签发后撤销预约","expected":{"B2":"BOOKING_INACTIVE","B2+Evidence":"BOOKING_INACTIVE","Ours":"BOOKING_INACTIVE"}},
+    {"id":"T13","scenario":"booking_version_changed","attack_payload":"令牌签发后延长预约，业务资格仍成立","expected":{"B2":"EXECUTED","B2+Evidence":"EVIDENCE_MISMATCH","Ours":"EVIDENCE_MISMATCH"}},
+    {"id":"T14","scenario":"approval_revoked","attack_payload":"机房申请的原有效审批已撤销","expected":{"B2":"APPROVAL_INSUFFICIENT","B2+Chain":"APPROVAL_INSUFFICIENT","Ours":"APPROVAL_INSUFFICIENT"}},
+    {"id":"T15","scenario":"approval_digest_mismatch","attack_payload":"审批引用属于另一项操作","expected":{"B2":"APPROVAL_MISMATCH","B2+Chain":"APPROVAL_MISMATCH","Ours":"APPROVAL_MISMATCH"}},
+    {"id":"T16","scenario":"approval_stale","attack_payload":"审批查询返回过期的状态快照","expected":{"B2":"APPROVAL_STALE","B2+Chain":"APPROVAL_STALE","Ours":"APPROVAL_STALE"}}
+  ]
+}

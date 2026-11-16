@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Member C tool manifest payload",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["tools"],
+  "properties": {
+    "tools": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["tool_id", "description", "argument_schema", "risk_level",
+                     "execution_target", "service_identity"],
+        "properties": {
+          "tool_id": {"type": "string", "pattern": "^[A-Za-z0-9_-]{1,80}$"},
+          "description": {"type": "string", "minLength": 1},
+          "argument_schema": {
+            "type": "object",
+            "required": ["type"],
+            "properties": {"type": {"const": "object"}}
+          },
+          "risk_level": {"enum": ["read", "normal", "high"]},
+          "execution_target": {"type": "string", "pattern": "^https?://"},
+          "service_identity": {"type": "string", "pattern": "^[A-Za-z0-9_-]{1,80}$"}
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Member C signed release or revocation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["action", "payload", "signature"],
+  "properties": {
+    "action": {"enum": ["publish", "revoke"]},
+    "signature": {"type": "string", "pattern": "^[A-Za-z0-9_-]{86}$"},
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scope", "kind", "artifact_id", "version", "key_id", "digest"],
+      "properties": {
+        "scope": {"$ref": "#/$defs/id"},
+        "kind": {"enum": ["agent_config", "prompt", "policy", "tool_manifest", "knowledge"]},
+        "artifact_id": {"$ref": "#/$defs/id"},
+        "version": {"type": "integer", "minimum": 1, "maximum": 2147483647},
+        "key_id": {"$ref": "#/$defs/id"},
+        "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    }
+  },
+  "$defs": {"id": {"type": "string", "pattern": "^[A-Za-z0-9_-]{1,80}$"}}
+}

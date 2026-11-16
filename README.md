@@ -184,3 +184,15 @@ A 与 E 已跑通只读预约查询。接下来按接口契约联通 D 的策略
 ## 许可证
 
 本仓库采用 [MIT License](LICENSE)。
+
+## 角色身份与完成记录
+
+角色负责人可更新认领信息，并在完成验收后补上对应的 PR、测试结果或演示记录。
+
+| 角色 | 身份与职责 | 负责人 GitHub | 已完成和验收情况 | 后续交付 |
+| --- | --- | --- | --- | --- |
+| **A** | 业务服务、独立执行器与端到端联调 | [`Gump111458785`](https://github.com/Gump111458785) | FastAPI 与 SQLite、执行器验签与防重放、基于 τ-bench 的状态评测已交付。72 项测试通过，51/51 个评测组合符合预期。Dify 工具 Test 和 Agent 草稿读到了 `BK-1042` 的真实 SQLite 状态。[实现 PR](https://github.com/Gump111458785/edge-agent-trust/pull/1) · [Dify 验收](agent/dify/README.md#验收真实预约查询) | 接入 B、C、D 的真实服务后汇总端到端结果。 |
+| **B** | Hyperledger Fabric 多方审批与可验证审计 | 待记录 | A 侧审批验证接口与测试替身已就绪。[接口契约](docs/a-interface-contract.md) | 交付 Fabric 审批、撤销状态核验与审计锚定，完成真实链上联调。 |
+| **C** | 密码学组件、可信配置发布与知识检索 | 待记录 | A 侧已定义策略版本和工具清单版本的校验字段。[接口契约](docs/a-interface-contract.md) | 交付签名发布、可信检索、撤销与防回滚验证。 |
+| **D** | 边缘可信网关、策略裁决与令牌签发 | 待记录 | A 侧令牌验证接口已用测试签发器验证。[接口契约](docs/a-interface-contract.md) | 交付真实网关、策略和证据绑定签发链路，与 A 联调正常与越权请求。 |
+| **E** | Dify 基础 Agent、LLM 接入与汇报 | 待记录 | Dify Cloud 与百炼 Qwen 已完成基础 Agent 和 Mock 工具验证，并与 A 完成真实预约只读联调。[应用包](agent/dify/edge-agent-dify-smoke.ifpkg) · [复现指南](agent/dify/README.md) | 汇总 A–D 的对照实验与证据，制作演示和汇报材料。 |

@@ -2,6 +2,8 @@
 
 业务读取和执行器可作为两个 FastAPI 服务运行。读服务以 SQLite 只读模式打开数据库。执行器验证独立服务凭据、用户会话和 Ed25519 授权，在原子事务中消费令牌、写入虚拟权限并记录执行结果。权限数据、预约与身份均为模拟数据。
 
+本机测试已验证合法授权写入、直连拒绝、参数篡改与并发重放。Dify Cloud 的工具 Test 和 Agent 草稿已通过 `a_live_booking` 查询 `BK-1042`。[Dify 联调记录与复现步骤](../agent/dify/README.md#验收真实预约查询)
+
 ## 运行测试与评测
 
 在仓库根目录使用 Python 3.11 或以上版本。
@@ -23,7 +25,7 @@ python -m evaluation.run_benchmark --config B2 --config Ours --task T08 --task T
 - B0/B1 使用仅存在于离线运行器的实验路径和独立临时数据库。B1 的业务判断由测试替身提供。
 - B2、B2+Evidence、B2+Chain 与 Ours 通过 A 的 HTTP 执行接口验签并检查状态。签发密钥由测试运行器临时生成，审批替身返回预核验的合成状态。两种审批配置用相同替身验证执行契约，真实 Fabric 的增量和开销待测。
 - B2 与证据绑定版本都会拒绝已撤销的预约。T13 改变预约版本并保留业务资格，用于观察证据绑定对旧授权的独立影响。
-- 状态评分借鉴 τ-bench 的初始环境重置及最终状态比较。这里用校园模拟任务验证 SQLite、令牌消费和意外的旁路状态变化。作者的 Retail/Airline 模型成绩仍未复现。[原论文](https://arxiv.org/abs/2406.12045) · [作者评分器](https://github.com/sierra-research/tau-bench/blob/main/tau_bench/envs/base.py)
+- 状态评分借鉴 τ-bench 的初始环境重置和最终状态比较。每个用例以同一版种子数据创建独立数据库，按预期核对权限、令牌消费与执行审计，同时检查其他访客、预约与会话的状态。当前复跑范围为本项目的校园任务。[原论文](https://arxiv.org/abs/2406.12045) · [作者评分器](https://github.com/sierra-research/tau-bench/blob/main/tau_bench/envs/base.py) · [本项目评分器](../evaluation/state_evaluator.py)
 
 ## 本机运行预约工具
 
@@ -76,7 +78,7 @@ python -m business.app.quick_tunnel
 
 ### 自有 HTTPS 入口
 
-`GET /tool-openapi.json` 只发布 `query_booking` 的定义。E 有可达 HTTPS 入口后，将 `ROLE_A_TOOL_BASE_URL` 设置为该入口。反向代理只路由只读 `/booking` 及按需提供的 Schema。Dify 工具凭据填合成访客临时会话。每个真实访客的身份传播由 D 的可信会话链路完成。执行器保持内部监听。当前仓库里的 Dify 应用仍用原预约 Mock，云端换接取决于可达入口和 E 的配置。
+将 `ROLE_A_TOOL_BASE_URL` 设置为可达的 HTTPS 入口。`GET /tool-openapi.json` 发布 `query_booking` 的定义，反向代理只路由 `/booking` 和所需的 Schema。Dify 工具凭据填合成访客临时会话。真实访客身份传播由 D 的可信会话链路负责，执行器保持内部监听。仓库的 Dify 应用包用于复现 Mock 基线，Cloud 草稿可按[真实预约联调步骤](../agent/dify/README.md#接入-a-的真实预约服务)配置 `a_live_booking`。
 
 可将反向代理的上游设为 `uvicorn business.app.public_booking:create_public_booking_app --factory --host 127.0.0.1 --port 8000`。该进程只注册预约查询和工具定义。内部事实服务和执行器使用各自的内部端口与配置。
 

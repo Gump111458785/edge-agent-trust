@@ -2,15 +2,27 @@
 
 本项目研究**面向不可信 Agent 的可验证工具执行授权机制**。以校园虚拟通行为实验场景，假设攻击者能影响 Agent 的输入、知识或配置，甚至控制它提出的工具调用。我们在边缘网关和独立执行器上验证来源、身份、参数、一次性授权及必要的多方审批，检验攻击在何种信任假设下能被挡在业务状态更新之前。
 
-**项目状态**　E 已用 Dify 和新加坡百炼跑通无攻击、未接入项目防护的只读预约演示。A 的本地 SQLite 业务 API、独立执行器和状态评测已可运行。已用测试签发器与审批替身验证常规执行和拦截用例。Dify 真库联调、真实 D/B/C 服务接入与端到端攻防仍待完成。见 [A 的运行说明](business/README.md)及[接口契约](docs/a-interface-contract.md)。
+**项目状态**　A 的预约服务、独立执行器和本地状态评测已合入 `main`。Dify Cloud 已用百炼 Qwen 跑通 Mock 基线，真实预约工具也已在工具 Test 和 Agent 草稿中查到 SQLite 测试预约。真实 B/C/D 服务接入与完整攻防验收仍待完成。[A 的实现 PR](https://github.com/Gump111458785/edge-agent-trust/pull/1)
 
-## 基础 Agent 快速开始
+## 快速开始
 
-1. 下载 [Dify 应用包](agent/dify/edge-agent-dify-smoke.ifpkg)，在 Dify Studio 选择 **Create → Import App**。应用包包含 Agent 和只读预约 Mock。
-2. 在 Dify 的 **Integrations → Model Provider** 为 **OpenAI-API-compatible** 配置新加坡百炼 API Key，模型填 `qwen3.5-flash-2026-02-23`，工具调用类型选 **Tool Call**。参见 [配置与联调说明](agent/dify/README.md)。
-3. 打开 Agent 的 **Debug & Preview**，输入「请帮我查一下预约 BK-1042 的状态和到访地点」。展开 **Used query_booking**，核对调用参数 `booking_id=BK-1042`，以及工具返回和最终答复中的 `demo-7H2Q`。
+1. 在 Dify Studio 选择 **Create → Import App**，导入 [Dify 应用包](agent/dify/edge-agent-dify-smoke.ifpkg)。应用包提供 Function Calling Agent 和预约 Mock。
+2. 在 **Integrations → Model Provider** 配置 **OpenAI-API-compatible**。使用新加坡百炼 API Key，模型选 `qwen3.5-flash-2026-02-23`，工具调用类型选 **Tool Call**。[LLM 配置和 API 自检](agent/dify/README.md#配置百炼-llm)
+3. 在 **Debug & Preview** 输入「请查一下 BK-1042 的状态和到访地点」，检查 `query_booking` 的参数与响应，完成 Mock 基线验证。[基线验收用例](agent/dify/README.md#运行-mock-基线)
+4. 接入真实预约时，在测试主机启动 A 的只读 HTTPS 服务，用生成的 `/tool-openapi.json` 和临时 Bearer 配置 `a_live_booking`。先运行工具 Test，再在草稿调试中确认调用来自这个工具。[Dify 真实预约联调步骤](agent/dify/README.md#接入-a-的真实预约服务)
 
-已通过的实测包括中文对话、结构化工具调用、工具结果回传和缺少预约编号时追问。当前验证使用云端推理和合成预约数据，安全实验将接入模拟业务写操作和独立执行器。
+百炼提供模型推理，Dify 编排工具调用，A 的 FastAPI 服务从 SQLite 读取业务状态。联调使用合成预约与访客身份。公网入口开放预约读取和工具定义，执行器通过内部接口独立授权写入。
+
+## A 角色的实现与验收
+
+| 已交付 | 实现与验收结果 |
+| --- | --- |
+| SQLite 业务服务 | 提供预约、会话、权限状态与内部事实查询。只读查询按会话限制访客范围，公网入口仅提供 `GET /booking` 和 `GET /tool-openapi.json`。 |
+| 独立执行器 | 验证服务凭据、Ed25519 签名、操作参数、用户会话与所需证据。令牌消费、权限变更和成功审计在同一事务提交。并发重放最多产生一次成功写入。 |
+| 状态评测 | 将 τ-bench 的环境重置和最终数据库状态比较方法移植到校园用例。每个用例使用独立 SQLite，并核对权限、令牌消费与执行记录。72 项自动测试通过，评测中的 51 个任务与配置组合符合预期。 |
+| Dify Cloud 只读联调 | 工具 Test 与 Agent 草稿均通过。`a_live_booking` 的 `query_booking` 查询 `BK-1042`，返回 `confirmed`、智慧楼、访客区和 `demo-7H2Q`。草稿工具列表与调用记录共同核对了工具来源。 |
+
+本地安全评测使用测试签发器和审批替身。真实 D 授权网关、C 签名发布与 B Fabric 审批接入后，A 负责联合验收并核对执行前后的数据库状态。[运行与复现](business/README.md) · [A–D 接口契约](docs/a-interface-contract.md)
 
 ## 研究问题
 
@@ -35,13 +47,13 @@ flowchart TD
     L -->|Merkle 根| F
 ```
 
-边缘可信网关部署在模拟楼宇入口的本地机器上。Agent 的业务工具指向网关，网关验证会话和工具清单、获取已核验的证据、裁决操作、签发令牌并记录审计事件。A 的执行器独立验证授权，持有更新权限库所需的访问权限，并与 Agent 及签发进程隔离。读取工具同样经网关做访问范围检查。
+在完整集成方案中，边缘可信网关部署在模拟楼宇入口的本地机器上。Agent 的业务工具指向网关，网关验证会话和工具清单、获取已核验的证据、裁决操作、签发令牌并记录审计事件。A 的执行器独立验证授权，持有更新权限库所需的访问权限，并与 Agent 及签发进程隔离。读取工具同样经网关做访问范围检查。
 
 访客文本、预约备注、检索片段和 Agent 输出作为数据处理。身份来自已认证会话，业务事实由网关直接向预约服务核对。高风险审批由各部门独立签名，Agent 和网关签发服务都不持有审批私钥。百炼只提供推理。使用云端模型时，完整性实验覆盖本项目管理的提示词、Agent 配置、工具清单、策略和知识库。权重完整性与权重回滚留给可访问模型文件的本地实验。
 
 | 层级 | 计划采用的技术 | 职责 |
 | --- | --- | --- |
-| Agent | Dify Cloud、百炼新加坡 `qwen3.5-flash-2026-02-23`、Function Calling | 理解中文请求，根据工具 Schema 提出操作。当前只读预约 Mock 已完成实测 |
+| Agent | Dify Cloud、百炼新加坡 `qwen3.5-flash-2026-02-23`、Function Calling | 理解中文请求，根据工具 Schema 提出操作。Mock 基线与 A 的真实只读预约查询均已实测 |
 | 业务与执行 | FastAPI、OpenAPI、SQLite | 提供访客、预约、权限和会话服务。独立执行器验证授权后更新状态 |
 | 可信发布与知识 | BGE-M3、Chroma、SHA-256、Ed25519 | 管理配置、规章和工具清单的签名发布、更新、撤销与使用时验证 |
 | 网关与授权 | FastAPI、Ed25519 | 验证身份、会话、工具身份及证据，裁决参数范围并签发一次性令牌 |
@@ -155,7 +167,7 @@ A–D 各自承担本模块攻防实验。A 负责业务工具和端到端集成
 2. 从 `main` 创建工作分支。可按模块命名，例如 `feat/a-booking-api` 或 `feat/d-token-guard`。外部贡献者可以从 Fork 提交。
 3. 向 `main` 提交 Pull Request，关联 Issue，说明改动范围和复现步骤，并附对应测试或实验记录。涉及接口变更时，请上下游模块成员共同审阅。
 
-E 已完成 Mock 工具冒烟测试。下一步接入 A 的业务 API 和 B0，然后联通 D 的 B1/B2。B 和 C 可依接口并行开发，最后接入完整方案并运行统一对照。复现材料使用模拟数据、示例配置和可重新生成的测试身份。仓库提交仅包含可公开内容。
+A 与 E 已跑通只读预约查询。接下来按接口契约联通 D 的策略与令牌服务、C 的签名配置和 B 的 Fabric 审批，运行端到端对照。复现材料使用模拟数据、示例配置和可重新生成的测试身份。
 
 ## 最终交付
 
@@ -165,6 +177,7 @@ E 已完成 Mock 工具冒烟测试。下一步接入 A 的业务 API 和 B0，�
 
 ## 技术依据
 
+- Yao 等人的 [τ-bench](https://arxiv.org/abs/2406.12045) 使用任务结束时的数据库状态判断操作是否达成目标。A 将这一方法用于校园门禁状态评测。实现见[状态评分代码](evaluation/state_evaluator.py)。
 - [OWASP LLM06 · Excessive Agency](https://genai.owasp.org/llmrisk/llm062025-excessive-agency/) 将执行授权放在下游系统，并对高影响操作要求审批。
 - [Fabric 背书策略](https://hyperledger-fabric.readthedocs.io/en/release-2.5/endorsement-policies.html) 与 [Fabric Gateway](https://hyperledger-fabric.readthedocs.io/en/latest/gateway.html) 说明组织背书和交易验证、提交的职责。业务审批由应用层规则及独立审批者签名表达。
 

@@ -1,0 +1,5 @@
+-r requirements-chroma.txt
+-r ../business/requirements.txt
+numpy>=1.24,<3
+onnxruntime>=1.20,<2
+tokenizers>=0.20,<1

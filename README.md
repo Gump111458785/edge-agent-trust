@@ -2,7 +2,7 @@
 
 本项目研究**面向不可信 Agent 的可验证工具执行授权机制**。以校园虚拟通行为实验场景，假设攻击者能影响 Agent 的输入、知识或配置，甚至控制它提出的工具调用。我们在边缘网关和独立执行器上验证来源、身份、参数、一次性授权及必要的多方审批，检验攻击在何种信任假设下能被挡在业务状态更新之前。
 
-**项目状态**　A 的预约服务、独立执行器和本地状态评测已合入 `main`。Dify Cloud 已用百炼 Qwen 跑通 Mock 基线，真实预约工具也已在工具 Test 和 Agent 草稿中查到 SQLite 测试预约。真实 B/C/D 服务接入与完整攻防验收仍待完成。[A 的实现 PR](https://github.com/Gump111458785/edge-agent-trust/pull/1)
+**项目状态**　A 的预约服务、独立执行器和本地状态评测，以及 C 的签名发布和可信 RAG 已合入 `main`。Dify Cloud 已用百炼 Qwen 跑通 Mock 和 SQLite 测试预约查询。D 在 `feat/d-evidence-gateway` 实现授权网关。本分支已用真实双组织 Fabric 和 A 的 SQLite 执行器验证 B 的审批、撤销、发布和日志存证。[B 的交付记录](docs/b-fabric-approvals.md)
 
 ## 快速开始
 
@@ -192,7 +192,7 @@ A 与 E 已跑通只读预约查询。接下来按接口契约联通 D 的策略
 | 角色 | 身份与职责 | 负责人 GitHub | 已完成和验收情况 | 后续交付 |
 | --- | --- | --- | --- | --- |
 | **A** | 业务服务、独立执行器与端到端联调 | [`Gump111458785`](https://github.com/Gump111458785) | FastAPI 与 SQLite、执行器验签与防重放、基于 τ-bench 的状态评测已交付。72 项测试通过，51/51 个评测组合符合预期。Dify 工具 Test 和 Agent 草稿读到了 `BK-1042` 的真实 SQLite 状态。[实现 PR](https://github.com/Gump111458785/edge-agent-trust/pull/1) · [Dify 验收](agent/dify/README.md#验收真实预约查询) | 接入 B、C、D 的真实服务后汇总端到端结果。 |
-| **B** | Hyperledger Fabric 多方审批与可验证审计 | 待记录 | A 侧审批验证接口与测试替身已就绪。[接口契约](docs/a-interface-contract.md) | 交付 Fabric 审批、撤销状态核验与审计锚定，完成真实链上联调。 |
+| **B** | Hyperledger Fabric 多方审批与可验证审计 | 待记录 | 双组织审批、发布摘要和 Merkle 日志锚定已在真实 Fabric 测试网验证，11 个审批对照用例符合预期。D 网关与 A 执行器通过联合冒烟，撤销后两端均拒绝。[交付与复现](docs/b-fabric-approvals.md) | 接入正式部署配置，参与全项目联合验收。 |
 | **C** | 密码学组件、可信配置发布与知识检索 | [`Crayoncharle`](https://github.com/Crayoncharle) | 已实现 SHA-256 / Ed25519、签名发布与更新、撤销、防回滚和可信 RAG。A 与 C 共 124 项测试通过，C 的 7 个 Demo 用例通过。真实 BGE-M3 的 3 条中文查询均命中预期首条结果，伪造片段被拦截。[实现 PR #3](https://github.com/Gump111458785/edge-agent-trust/pull/3) · [复现指南](trusted_release/README.md) | 与 D 联调正式令牌和证据版本，与 E 验收 Dify Cloud 可信检索，与 B 联调 Fabric 发布状态。 |
 | **D** | 边缘可信网关、策略裁决与令牌签发 | 待记录 | A 侧令牌验证接口已用测试签发器验证。[接口契约](docs/a-interface-contract.md) | 交付真实网关、策略和证据绑定签发链路，与 A 联调正常与越权请求。 |
 | **E** | Dify 基础 Agent、LLM 接入与汇报 | 待记录 | Dify Cloud 与百炼 Qwen 已完成基础 Agent 和 Mock 工具验证，并与 A 完成真实预约只读联调。[应用包](agent/dify/edge-agent-dify-smoke.ifpkg) · [复现指南](agent/dify/README.md) | 汇总 A–D 的对照实验与证据，制作演示和汇报材料。 |

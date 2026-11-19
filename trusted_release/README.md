@@ -127,7 +127,7 @@ python -B -m trusted_release.manage --config ../c-runtime/trust.json revoke ../c
 python -m uvicorn trusted_release.role_a:create_app --factory --host 127.0.0.1 --port 8001
 ```
 
-此入口继承 A 的默认审批配置。机房等高风险操作在 B 适配器接入前返回 `APPROVAL_UNAVAILABLE`。联合部署可向 `ReleaseAwareExecutor` 提供 A 的 `ApprovalVerifier`。C 读取当前发布与 A 提交权限库之间存在跨库窗口，需按组内接口契约在联调中测量。
+此入口读取与 A 相同的可选变量 `ROLE_B_FABRIC_CONFIG`，其值为 B 的 Fabric 读配置文件绝对路径。配置文件内的部门公钥、证书和 TLS 路径按 [B 的接入说明](../docs/b-fabric-approvals.md) 设置，Node.js 客户端依赖也须安装。配置存在时，C 的组合入口向 A 传入独立的 `ApprovalVerifier`，高风险执行重新核对 B 的部门签名和当前审批状态。部门公钥等启动加载配置无效时启动失败；节点连接、身份、TLS 或客户端问题在高风险请求时返回 `APPROVAL_UNAVAILABLE`；未设置此变量时高风险操作也返回 `APPROVAL_UNAVAILABLE`。程序化部署也可向 `ReleaseAwareExecutor` 提供 A 的 `ApprovalVerifier`。C 读取当前发布与 A 提交权限库之间存在跨库窗口，需按组内接口契约在联调中测量。
 
 对 Dify，配置 `ROLE_C_TRUST_CONFIG`、`ROLE_C_BGE_MODEL_DIR`、`ROLE_C_INDEX_PATH` 和长度至少 24 字符的独立 Bearer 密钥 `ROLE_C_DIFY_KEY`。软件将信任域 `scope` 作为 External Knowledge ID。用以下命令可在本机启动外部知识库服务。
 

@@ -41,4 +41,10 @@ B 适配器实现 `ApprovalSource.fetch_verified(reference)`，负责从独立�
 
 B 的 Fabric 适配器用操作摘要作为审批引用。A 可通过 `ROLE_B_FABRIC_CONFIG` 启用，详细配置见 [B 的交付与接入说明](b-fabric-approvals.md)。
 
-C 提供可信工具清单及策略版本。A 当前从部署配置读取预期版本，启动组合入口后续接入 C 的发布验证。预约的 `version` 由数据库触发器保护，归属、区域、状态或有效期变化会递增。D 的令牌内容只作为待比较的签名断言，A 从自己的会话、预约和部署配置读取当前事实。
+C 已提供 `load_configuration`，从同一可信状态快照验证策略与工具清单的签名、内容摘要、版本及撤销状态，返回 `VerifiedConfiguration`。`evidence_versions()` 输出 `policy_version` 和 `tool_manifest_version`，格式为 `v<版本>-<64 位发布摘要>`。D 将其绑定到令牌证据，A 的 C 组合入口再从自己的可信状态核对当前版本，并按签名工具清单中的 Schema 校验参数。
+
+A 可设置 `ROLE_C_TRUST_CONFIG`，使用 `trusted_release.role_a:create_app` 工厂启动组合执行器。默认制品 ID 为 `campus-policy` 与 `campus-tools`，可通过 `ROLE_C_POLICY_ID` 和 `ROLE_C_TOOLS_ID` 覆盖。该入口先核验发布，再复用 A 原有令牌、会话、预约、审批和事务检查；同时支持 `ROLE_B_FABRIC_CONFIG` 加载 B 的独立审批源。接口参数与错误码见 [C 的接口契约](c-interface-contract.md)，部署配置与复现见 [C 的运行说明](../trusted_release/README.md#本地联调)，交付和验收见 [C 的工作记录](c-work-summary.md)。
+
+发布版本不匹配、已撤销或参数不符合清单时，组合入口分别返回 `403 TRUST_VERSION_MISMATCH`、`403 TRUST_REVOKED` 或 `403 TRUST_INVALID_TOOL_ARGUMENTS`；可信状态不可用或绑定异常返回 `503 TRUST_STATE_UNAVAILABLE` 或 `503 TRUST_STATE_INVALID`。本地交接测试已覆盖配置更新、撤销后的拒绝及审批适配。版本保护依赖本地可信状态库完整性，独立 Fabric 发布检查点尚未在 C 运行时自动强制使用；发布核验与 A 业务提交之间仍有跨库撤销窗口。
+
+预约的 `version` 由数据库触发器保护，归属、区域、状态或有效期变化会递增。D 的令牌内容只作为待比较的签名断言，A 从自己的会话、预约和部署配置读取当前事实。

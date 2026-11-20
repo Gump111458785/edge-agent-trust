@@ -7,3 +7,5 @@ __pycache__/
 *.sqlite3-wal
 role-a-results/
 gateway/data/
+role-b-results/
+role_b/**/node_modules/

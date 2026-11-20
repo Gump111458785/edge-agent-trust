@@ -15,7 +15,7 @@ from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import TypeAdapter
 
-from .authorization import Rejected, TokenVerifier
+from .authorization import ApprovalVerifier, Rejected, TokenVerifier
 from .db import connect, create_session, find_session, write_transaction
 from .executor import Executor
 from .schemas import Area, BookingId, BookingToolResult, DemoLogin, ExecuteRequest, Identifier
@@ -155,7 +155,13 @@ def create_executor_app(executor: Executor | None = None, service_key: str | Non
         key = load_pem_public_key(Path(os.environ['ROLE_A_D_PUBLIC_KEY']).read_bytes())
         if not isinstance(key, Ed25519PublicKey):
             raise ValueError('ROLE_A_D_PUBLIC_KEY must contain an Ed25519 public key')
+        approvals = ApprovalVerifier()
+        if config := os.environ.get('ROLE_B_FABRIC_CONFIG'):
+            from role_b.approval import FabricApprovalSource
+
+            approvals = ApprovalVerifier(source=FabricApprovalSource.from_config(Path(config)))
         executor = Executor(database_path(), TokenVerifier(issuer, audience, {key_id: key}),
+                            approvals=approvals,
                             evidence_required=profile == 'evidence',
                             policy_version=os.environ.get('ROLE_A_POLICY_VERSION', 'policy-v1'),
                             tool_manifest_version=os.environ.get('ROLE_A_TOOL_VERSION', 'tools-v1'))

@@ -1,0 +1,9 @@
+{
+  "name": "edge-agent-fabric-client",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "@grpc/grpc-js": "^1.14.0",
+    "@hyperledger/fabric-gateway": "~1.7.0"
+  }
+}

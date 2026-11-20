@@ -39,4 +39,6 @@ B 适配器实现 `ApprovalSource.fetch_verified(reference)`，负责从独立�
 
 审批操作摘要取规范化 `{"operation_id": ..., "action": ..., "subject": ..., "args_hash": ...}`，加 ASCII `edge-agent-trust:approval-operation:v1` 和 LF 前缀后做 SHA-256。SQLite 提交前再次核对审批有效期及快照新鲜度。Fabric 撤销与 SQLite 提交之间仍有跨系统时间窗口，联调时按这一窗口单列实验。
 
+B 的 Fabric 适配器用操作摘要作为审批引用。A 可通过 `ROLE_B_FABRIC_CONFIG` 启用，详细配置见 [B 的交付与接入说明](b-fabric-approvals.md)。
+
 C 提供可信工具清单及策略版本。A 当前从部署配置读取预期版本，启动组合入口后续接入 C 的发布验证。预约的 `version` 由数据库触发器保护，归属、区域、状态或有效期变化会递增。D 的令牌内容只作为待比较的签名断言，A 从自己的会话、预约和部署配置读取当前事实。

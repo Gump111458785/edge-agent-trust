@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from typing import Callable
 
-from business.app.authorization import Rejected, TokenVerifier
+from business.app.authorization import ApprovalVerifier, Rejected, TokenVerifier
 from business.app.executor import Executor
 from business.app.main import create_executor_app, database_path
 from business.app.schemas import Evidence, ExecuteRequest, GrantArgs
@@ -73,6 +73,12 @@ def create_app():
         os.environ.get("ROLE_A_AUDIENCE", "role-a-executor"),
         {os.environ.get("ROLE_A_KEY_ID", "role-d-v1"): public_key},
     )
-    executor = ReleaseAwareExecutor(database_path(), tokens, evidence_required=profile == "evidence",
+    approvals = ApprovalVerifier()
+    if config := os.environ.get("ROLE_B_FABRIC_CONFIG"):
+        from role_b.approval import FabricApprovalSource
+
+        approvals = ApprovalVerifier(source=FabricApprovalSource.from_config(Path(config)))
+    executor = ReleaseAwareExecutor(database_path(), tokens, approvals=approvals,
+                                    evidence_required=profile == "evidence",
                                     release_check=verifier)
     return create_executor_app(executor)

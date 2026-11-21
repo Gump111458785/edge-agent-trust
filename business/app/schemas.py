@@ -21,6 +21,11 @@ class GrantArgs(StrictModel):
     valid_minutes: Annotated[int, Field(ge=1, le=120)]
 
 
+class GrantProposal(StrictModel):
+    action: Action
+    args: GrantArgs
+
+
 class Evidence(StrictModel):
     session_id: Identifier
     booking_id: BookingId

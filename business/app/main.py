@@ -15,10 +15,10 @@ from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import TypeAdapter
 
-from .authorization import ApprovalVerifier, Rejected, TokenVerifier
+from .authorization import ApprovalVerifier, Rejected, TokenVerifier, operation_digest
 from .db import connect, create_session, find_session, write_transaction
-from .executor import Executor
-from .schemas import Area, BookingId, BookingToolResult, DemoLogin, ExecuteRequest, Identifier
+from .executor import Executor, restrict_action
+from .schemas import Area, BookingId, BookingToolResult, DemoLogin, ExecuteRequest, Identifier, GrantProposal
 
 bearer = HTTPBearer(auto_error=False)
 Credentials = Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)]
@@ -163,6 +163,7 @@ def create_executor_app(executor: Executor | None = None, service_key: str | Non
         executor = Executor(database_path(), TokenVerifier(issuer, audience, {key_id: key}),
                             approvals=approvals,
                             evidence_required=profile == 'evidence',
+                            confirmation_required=os.environ.get('ROLE_A_REQUIRE_CONFIRMATION') == '1',
                             policy_version=os.environ.get('ROLE_A_POLICY_VERSION', 'policy-v1'),
                             tool_manifest_version=os.environ.get('ROLE_A_TOOL_VERSION', 'tools-v1'))
     service_key = service_key or required_secret('ROLE_A_EXECUTOR_KEY')
@@ -185,6 +186,26 @@ def create_executor_app(executor: Executor | None = None, service_key: str | Non
                 if visitor is None:
                     raise Rejected('DEMO_LOGIN_REJECTED', 401)
                 return create_session(conn, request.visitor_id, executor.clock())
+
+    @app.put('/internal/executor/confirmations/{operation_id}')
+    def confirm(operation_id: Identifier, proposal: GrantProposal, credentials: Credentials,
+                session_token: SessionHeader = None):
+        require_service(credentials, service_key)
+        restrict_action(proposal.action, proposal.args)
+        now = executor.clock()
+        with write_transaction(executor.path) as conn:
+            session = find_session(conn, session_token, now) if session_token else None
+            if session is None:
+                raise Rejected('SESSION_REQUIRED', 401)
+            digest = operation_digest(operation_id, proposal.action, session['visitor_id'], proposal.args)
+            conn.execute(
+                'INSERT INTO grant_confirmations VALUES (?, ?, ?, ?, ?) ON CONFLICT(operation_id) DO NOTHING',
+                (operation_id, session['session_id'], digest, now, min(now + 300, session['expires_at'])),
+            )
+            row = conn.execute('SELECT * FROM grant_confirmations WHERE operation_id = ?', (operation_id,)).fetchone()
+            if (row['session_id'], row['digest']) != (session['session_id'], digest) or row['expires_at'] <= now:
+                raise Rejected('CONFIRMATION_CONFLICT', 409)
+        return {'operation_id': operation_id, 'status': 'confirmed'}
 
     @app.post('/internal/executor/access-grants')
     def execute(request: ExecuteRequest, credentials: Credentials, session_token: SessionHeader = None):

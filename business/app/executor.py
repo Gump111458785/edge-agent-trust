@@ -5,7 +5,7 @@ from time import time
 from typing import Callable
 from uuid import uuid4
 
-from .authorization import ApprovalVerifier, Rejected, TokenVerifier
+from .authorization import ApprovalVerifier, Rejected, TokenVerifier, operation_digest
 from .db import find_session, write_transaction
 from .schemas import ExecuteRequest, GrantArgs
 
@@ -62,6 +62,7 @@ class Executor:
     evidence_required: bool = True
     policy_version: str = 'policy-v1'
     tool_manifest_version: str = 'tools-v1'
+    confirmation_required: bool = False
     clock: Callable[[], int] = field(default=lambda: int(time()))
 
     def execute(self, request: ExecuteRequest, session_token: str | None) -> dict:
@@ -113,6 +114,16 @@ class Executor:
                         or evidence.policy_version != self.policy_version
                         or evidence.tool_manifest_version != self.tool_manifest_version):
                     raise Rejected('EVIDENCE_MISMATCH')
+            if self.confirmation_required:
+                digest = operation_digest(claims.operation_id, request.action, claims.subject, request.args)
+                confirmation = conn.execute(
+                    '''SELECT 1 FROM grant_confirmations
+                       WHERE operation_id = ? AND session_id = ? AND digest = ?
+                         AND confirmed_at <= ? AND expires_at > ?''',
+                    (claims.operation_id, session['session_id'], digest, now, now),
+                ).fetchone()
+                if confirmation is None:
+                    raise Rejected('USER_CONFIRMATION_REQUIRED')
             conn.execute('INSERT INTO used_tokens VALUES (?, ?, ?)',
                          (claims.token_id, claims.operation_id, now))
             grant_id = apply_grant(conn, claims.operation_id, claims.subject, request.args, now)

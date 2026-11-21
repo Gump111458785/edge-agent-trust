@@ -1,5 +1,7 @@
 # D 模块工作说明
 
+> 本文保留初始开发记录。D 已合入主线，随后 [主线 CI](https://github.com/Gump111458785/edge-agent-trust/actions/runs/44769360275) 通过了 176 项测试和 51/51 个评测组合。B 记录了真实 Fabric 联合冒烟。集成版本的 D 启动入口已支持 `ROLE_D_FABRIC_CONFIG`，见[集成验收](integration.md)。
+
 日期：2026-11-18。开发分支：`feat/d-evidence-gateway`。
 本次工作由 Codex 根据 D 的职责实现，代码位于当前项目的 `gateway/`，未修改 A、C 的现有实现。
 

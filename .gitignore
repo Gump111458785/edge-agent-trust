@@ -9,3 +9,4 @@ role-a-results/
 gateway/data/
 role-b-results/
 role_b/**/node_modules/
+.venv-review/

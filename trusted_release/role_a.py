@@ -80,5 +80,6 @@ def create_app():
         approvals = ApprovalVerifier(source=FabricApprovalSource.from_config(Path(config)))
     executor = ReleaseAwareExecutor(database_path(), tokens, approvals=approvals,
                                     evidence_required=profile == "evidence",
+                                    confirmation_required=os.environ.get('ROLE_A_REQUIRE_CONFIRMATION') == '1',
                                     release_check=verifier)
     return create_executor_app(executor)

@@ -85,6 +85,9 @@ def retrieve(index: ChunkIndex, store: ReleaseStore, query: str, *, limit: int =
                     hits.append(hit)
                     seen.add(identity)
             except TrustError as exc:
+                if exc.code in {"STATE_UNAVAILABLE", "STATE_INVALID"}:
+                    # A shared trust dependency failed: discard partial results and report 503.
+                    raise
                 rejections.append(RejectedCandidate(rank, exc.code))
             if len(hits) == limit:
                 break

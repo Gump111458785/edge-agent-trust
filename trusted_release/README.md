@@ -141,6 +141,18 @@ Dify Cloud 对接时需要能从云端访问的测试 HTTPS 地址。外部知�
 
 更新嵌入式 Chroma 时，先停止检索服务，再运行 `manage index`，然后重启服务读取新索引。SQLite 中已提交的撤销在下一次读取快照时生效。变更信任公钥后需重启检索服务和 A 的组合入口，以加载新的公钥配置。
 
+## 独立发布检查点
+
+要发现**整个本地数据库被旧快照替换**，使用 [带检查点的信任配置](examples/trust-checkpoint.json)，并为所有消费进程设置 `ROLE_C_REQUIRE_CHECKPOINT=1`。配置中的 `checkpoint` 指定 B 的只读 Fabric 连接配置；每次发布加载均在本地验签后提交 `ReadRelease`，比对完整引用与撤销状态。配置存在时始终强制校验，不缓存跨请求的成功结果，不在网络错误时退回仅本地校验。
+
+远端不一致报 `CHECKPOINT_MISMATCH`；读取或提交确认不可用报 `STATE_UNAVAILABLE`。A/D 延续原错误映射拒绝请求；检索在依赖不可用时返回 503，并丢弃部分结果。管理员 `manage publish/revoke` 可通过显式 `--anchor-config` 使用独立发布身份锚定已经验证的发布/撤销。部署步骤、失败重试和跨存储窗口见 [C 检查点接入说明](../docs/c-checkpoint-integration.md)。
+
+```powershell
+python -B -m trusted_release.checkpoint_demo
+```
+
+该命令运行真实 C 签名及 B 原链码的**内存桩**，验证整库回滚、独立撤销与恢复等 10 个场景；输出 `live_fabric: false`，不是实际 Fabric 证据。有真实测试链时可提供 `--fabric-reader` 和 `--fabric-publisher` 运行同一实验。C 专属 CI 安装 Node.js 22 并运行此实验。原纯本地示例继续兼容，但不具备独立检查点保护。
+
 ## 真实 BGE-M3 对照实验
 
 下载固定修订的 INT8 ONNX 模型和分词器到仓库外的资产目录。测试运行器会核对两份文件的 SHA-256。
@@ -160,12 +172,13 @@ python -B -m trusted_release.model_demo --model-dir ../member-c-assets/bge-m3-on
 | `SCOPE_MISMATCH` / `UNAUTHORIZED_KEY` / `BAD_SIGNATURE` | 部署域、密钥授权或签名校验失败 |
 | `DIGEST_MISMATCH` / `CHUNK_DIGEST_MISMATCH` | 制品字节或候选片段与签名内容不符 |
 | `ROLLBACK` / `VERSION_CONFLICT` / `VERSION_MISMATCH` | 旧发布、同版本分叉或运行时版本已更改 |
+| `CHECKPOINT_MISMATCH` | 本地发布与独立当前引用或撤销状态不一致 |
 | `REVOKED` / `UNKNOWN_RELEASE` / `UNKNOWN_TOOL` / `UNKNOWN_CHUNK` | 当前制品已撤销或指定身份不存在 |
 | `INVALID_QUERY` / `INVALID_CANDIDATE` | 查询参数或索引记录格式错误 |
 | `INVALID_TOOL_ARGUMENTS` | 工具调用参数违反已验证的 Schema |
 | `STATE_INVALID` / `STATE_UNAVAILABLE` / `INDEX_UNAVAILABLE` | 无法验证状态绑定或访问依赖 |
 
-SQLite 保存已见最高版本和当前撤销状态。部署须控制数据库及其备份的写权限，按可信状态恢复。若攻击者可以修改这些状态或替换数据库快照，需要 B 提供独立检查点来发现回退。发布信任根和签名密钥均由部署配置。常规轮换可先发布新版再移除旧公钥。紧急轮换可先移除失陷公钥，使相应旧版立即无法加载，再用新公钥对应的私钥签发高于已见版本的发布。
+SQLite 保存已见最高版本和当前撤销状态。部署须控制数据库及其备份的写权限，按可信状态恢复。启用上述独立检查点后，可发现与远端当前引用不符的旧快照；没有配置时仅有本地保护。该保证依赖独立网络及其信任配置完好，并保留跨存储读取/提交窗口。发布信任根和签名密钥均由部署配置。常规轮换可先发布新版再移除旧公钥。紧急轮换可先移除失陷公钥，使相应旧版立即无法加载，再用新公钥对应的私钥签发高于已见版本的发布。
 
 模块使用标准 SHA-256 和 Ed25519，并验证已知测试向量。单调版本检查参考 TUF 的回滚威胁模型，本模块只使用本文规定的信封和部署状态。 [NIST FIPS 180-4](https://csrc.nist.gov/pubs/fips/180-4/upd1/final) · [RFC 8032 的 Ed25519 向量](https://www.rfc-editor.org/rfc/rfc8032#section-7.1) · [TUF 规范](https://theupdateframework.github.io/specification/latest/)
 

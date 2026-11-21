@@ -1,0 +1,21 @@
+{
+  "scope": "campus",
+  "database": "releases.sqlite3",
+  "keys": {
+    "publisher-c": {
+      "public_key": "publisher-c.pem",
+      "publish": ["agent_config", "prompt", "policy", "tool_manifest", "knowledge"],
+      "revoke": []
+    },
+    "revoker-c": {
+      "public_key": "revoker-c.pem",
+      "publish": [],
+      "revoke": ["agent_config", "prompt", "policy", "tool_manifest", "knowledge"]
+    }
+  },
+  "checkpoint": {
+    "provider": "fabric",
+    "config": "fabric/reader.json",
+    "max_read_seconds": 15
+  }
+}

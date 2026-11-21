@@ -9,6 +9,7 @@ from typing import Iterator, Mapping
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
+from .checkpoint import ReleaseCheckpoint
 from .crypto import sha256_hex, verify_bytes
 from .payloads import validate_content
 from .protocol import ReleaseRef, SignedStatement, TrustError, is_identifier, validate_identity
@@ -36,16 +37,19 @@ class _Head:
 class ReleaseStore:
     """Open persisted state. Only the publisher process needs write access to the file."""
 
-    def __init__(self, path: Path, scope: str, keys: Mapping[str, TrustedKey]):
+    def __init__(self, path: Path, scope: str, keys: Mapping[str, TrustedKey], *,
+                 checkpoint: ReleaseCheckpoint | None = None):
         if not is_identifier(scope):
             raise TrustError("INVALID_STATEMENT")
         self.path = Path(path).absolute()
         self.scope = scope
         self._keys = MappingProxyType(dict(keys))
+        self._checkpoint = checkpoint
 
     @classmethod
-    def initialize(cls, path: Path, scope: str, keys: Mapping[str, TrustedKey]) -> "ReleaseStore":
-        store = cls(path, scope, keys)
+    def initialize(cls, path: Path, scope: str, keys: Mapping[str, TrustedKey], *,
+                   checkpoint: ReleaseCheckpoint | None = None) -> "ReleaseStore":
+        store = cls(path, scope, keys, checkpoint=checkpoint)
         try:
             with closing(sqlite3.connect(store.path)) as connection, connection:
                 connection.execute("""
@@ -197,4 +201,6 @@ class ReleaseSnapshot:
             raise TrustError("REVOKED")
         if expected_version is not None and head.release.ref.tag != expected_version:
             raise TrustError("VERSION_MISMATCH")
+        if self._store._checkpoint is not None:
+            self._store._checkpoint.verify_current(head.release.ref)
         return head.release

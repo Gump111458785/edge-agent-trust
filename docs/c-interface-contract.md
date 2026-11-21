@@ -1,6 +1,6 @@
 # C 模块接口与运行说明
 
-以下为 C 与 A/B/D/E 的联调契约 v1，按 main `1f66df7` 的实现整理。工作内容与验收记录见 [C 模块工作说明](c-work-summary.md)。
+以下为 C 与 A/B/D/E 的联调契约 v1，基于 main 的接口，并补充 2026-11-21 独立发布检查点配置。工作内容与验收记录见 [C 模块工作说明](c-work-summary.md)。
 
 ## 信任边界
 
@@ -163,6 +163,7 @@ Content-Type: application/json
 | `SCOPE_MISMATCH` / `UNAUTHORIZED_KEY` / `BAD_SIGNATURE` | 域、公钥权限或签名不符 |
 | `DIGEST_MISMATCH` / `CHUNK_DIGEST_MISMATCH` | 内容或候选片段摘要不符 |
 | `ROLLBACK` / `VERSION_CONFLICT` / `VERSION_MISMATCH` | 旧发布、同版本冲突或使用时版本不符 |
+| `CHECKPOINT_MISMATCH` | 独立检查点未登记、已撤销或与本地完整发布引用不符 |
 | `REVOKED` / `UNKNOWN_RELEASE` / `UNKNOWN_TOOL` / `UNKNOWN_CHUNK` | 撤销或目标不存在 |
 | `INVALID_TOOL_ARGUMENTS` / `INVALID_QUERY` / `INVALID_CANDIDATE` | 参数、查询或候选格式不符 |
 | `STATE_UNAVAILABLE` / `STATE_INVALID` / `INDEX_UNAVAILABLE` | 状态不可用、绑定异常或索引依赖不可用 |
@@ -171,7 +172,9 @@ A 的 `ExecutorReleaseCheck` 将库拒绝映射为 `reason_code="TRUST_" + code`
 
 B 接收 `dataclasses.asdict(ref)`，包含 scope、kind、artifact_id、version、manifest_sha256。C 先验证发布，再由获准操作者调用 B 的 `publish_release(client, ref)` 或 `revoke_release(client, ref)`。`release_current(client, ref)` 为 True 时表示链上当前引用完全一致且未撤销；不可用时拒绝相关受保护操作，不能当作核验成功。[B 的接口和权限](b-fabric-approvals.md)
 
-上述 B 适配函数属于 B；C 的 `ReleaseStore` 和检索入口当前不会自动调用它们。`ROLE_B_FABRIC_CONFIG` 在 C 组合入口启用的是高风险审批源，不能据此宣称发布检查点已经自动启用。
+上述 B 适配函数属于 B。C 信任配置可增加 `checkpoint={"provider":"fabric","config":"fabric/reader.json","max_read_seconds":15}`；启用后每次 `ReleaseSnapshot.load` 通过 B 的 `FabricClient` 提交 `ReadRelease`，严格核对完整引用、未撤销状态与提交回执。`config` 相对于 C 信任配置；1–15 秒整数限制单次读取耗时，默认 15。`ROLE_C_REQUIRE_CHECKPOINT=1` 要求配置存在；无效配置或异常依赖不降级。纯本地模式保持兼容，但不能声称有此保护。
+
+`ROLE_B_FABRIC_CONFIG` 在 C 组合入口仍只启用高风险审批源，不能代替发布检查点配置。独立状态读取失败映射为已有 `STATE_UNAVAILABLE`；A/D 为 503，检索为 503 并清空本次部分结果。合法格式但不匹配的候选在检索中被过滤。详见 [部署、管理员锚定和可复现实验](c-checkpoint-integration.md)。
 
 ## 本地运行与配置
 
@@ -201,9 +204,12 @@ python -B -m trusted_release.manage --config ../c-runtime/trust.json index visit
 
 CLI 的 publish 成功输出 ReleaseRef JSON，index 输出 ref.tag，init/revoke 成功无输出；操作成功退出 0，捕获的信任、文件或值错误打印到 stderr 并退出 1，命令用法错误由 argparse 处理。撤销实验使用 `python -B -m trusted_release.manage --config ../c-runtime/trust.json revoke ../c-runtime/handbook.revoked.json`。
 
+`publish` 和 `revoke` 新增可选 `--anchor-config <B发布者连接配置>`，相对于命令工作目录。C 验证签名及内容/目标并更新本地状态后，再提交 B 发布/撤销交易；锚定失败退出 1，发布不输出成功引用，可幂等重试。该身份不交给消费服务。两处存储不原子提交，不能把本地成功、远端失败表述为整体完成。
+
 | 环境变量 | 用途 / 默认值 |
 | --- | --- |
 | `ROLE_C_TRUST_CONFIG` | 必填；上述信任配置路径 |
+| `ROLE_C_REQUIRE_CHECKPOINT` | 消费进程正式部署设 `1`；缺少检查点配置则启动失败。仅接受 `0`/`1`，默认 `0` 兼容本地实验 |
 | `ROLE_C_POLICY_ID` / `ROLE_C_TOOLS_ID` | A/D 使用，默认 `campus-policy` / `campus-tools` |
 | `ROLE_C_BGE_MODEL_DIR` | 检索必填；固定 BGE-M3 ONNX 及 tokenizer 目录 |
 | `ROLE_C_INDEX_PATH` | 检索必填；已建立的持久化 Chroma 索引 |
@@ -218,4 +224,4 @@ CLI 的 publish 成功输出 ReleaseRef JSON，index 输出 ref.tag，init/revok
 
 在仓库根目录安装测试依赖后运行 `python -B -m pytest -q -p no:cacheprovider trusted_release/tests` 和 `python -B -m trusted_release.demo`。端到端本地运行参考 [D 的接口文档](d-interface-contract.md#本地运行)，在签发后更新策略或撤销清单，核对 A 的 `TRUST_VERSION_MISMATCH` / `TRUST_REVOKED` 和未新增权限、未消费令牌的状态。
 
-防回滚依赖本地可信数据库及备份未被替换；独立发布检查点仍需部署接入。发布读取与业务事务之间有跨库撤销窗口。合法签名的恶意文本可能通过完整性校验，模型提案与实际业务写入应分别观察。Dify Cloud、真实 Fabric 和完整攻防实验的验收范围见 [C 工作记录](c-work-summary.md)。
+未启用检查点时，防回滚依赖本地可信数据库及备份未被替换。启用后，每次使用还核对独立当前状态，可发现与该状态不符的旧快照；仍依赖所配 Fabric 网络及信任根完好。区块单调上界只保存在检查点实例内存中；发布读取与业务事务、管理员本地写入与远端锚定之间仍有跨存储窗口。合法签名的恶意文本可能通过完整性校验。Dify Cloud、真实 Fabric 和完整攻防实验的验收范围见 [C 工作记录](c-work-summary.md)。

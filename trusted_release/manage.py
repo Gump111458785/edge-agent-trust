@@ -7,7 +7,8 @@ from pathlib import Path
 import sys
 
 from .handoff import open_store
-from .protocol import SignedStatement, TrustError
+from .checkpoint import anchor_release
+from .protocol import ReleaseRef, SignedStatement, TrustError
 
 
 def main() -> int:
@@ -18,8 +19,12 @@ def main() -> int:
     publish = subparsers.add_parser("publish", help="Import a signed release envelope and its payload")
     publish.add_argument("envelope", type=Path)
     publish.add_argument("content", type=Path)
+    publish.add_argument("--anchor-config", type=Path,
+                         help="B publisher connection config; anchor after local signature verification")
     revoke = subparsers.add_parser("revoke", help="Import a signed revocation envelope")
     revoke.add_argument("envelope", type=Path)
+    revoke.add_argument("--anchor-config", type=Path,
+                        help="B publisher connection config; anchor the verified revocation")
     index = subparsers.add_parser("index", help="Index a current signed knowledge document")
     index.add_argument("artifact_id")
     index.add_argument("--index-dir", required=True, type=Path)
@@ -30,9 +35,16 @@ def main() -> int:
         if args.operation == "publish":
             signed = SignedStatement.from_json(args.envelope.read_bytes())
             ref = store.publish(signed, args.content.read_bytes())
+            if args.anchor_config:
+                anchor_release(args.anchor_config, ref)
             print(json.dumps(asdict(ref), ensure_ascii=True))
         elif args.operation == "revoke":
-            store.revoke(SignedStatement.from_json(args.envelope.read_bytes()))
+            signed = SignedStatement.from_json(args.envelope.read_bytes())
+            store.revoke(signed)
+            if args.anchor_config:
+                target = signed.payload
+                ref = ReleaseRef(target.scope, target.kind, target.artifact_id, target.version, target.digest)
+                anchor_release(args.anchor_config, ref, revoked=True)
         elif args.operation == "index":
             from .embedding import open_onnx_index
 

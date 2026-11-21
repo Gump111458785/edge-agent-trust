@@ -90,10 +90,19 @@ class DecisionLog:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with closing(sqlite3.connect(self.path)) as conn, conn:
+            conn.execute('BEGIN IMMEDIATE')
             conn.execute('''CREATE TABLE IF NOT EXISTS decisions (
                 decision_id TEXT PRIMARY KEY, operation_id TEXT NOT NULL,
                 action TEXT NOT NULL, args_hash TEXT NOT NULL, status TEXT NOT NULL,
                 reason_code TEXT, token_id TEXT, evidence TEXT, recorded_at INTEGER NOT NULL)''')
+            conn.execute('''CREATE TABLE IF NOT EXISTS decision_sequence (
+                seq INTEGER PRIMARY KEY AUTOINCREMENT, decision_id TEXT UNIQUE NOT NULL)''')
+            conn.execute('''INSERT INTO decision_sequence(decision_id)
+                SELECT d.decision_id FROM decisions d WHERE NOT EXISTS (
+                    SELECT 1 FROM decision_sequence s WHERE s.decision_id = d.decision_id)
+                ORDER BY d.rowid''')
+            conn.execute('''CREATE TRIGGER IF NOT EXISTS sequence_decision AFTER INSERT ON decisions
+                BEGIN INSERT INTO decision_sequence(decision_id) VALUES (NEW.decision_id); END''')
 
     def record(self, proposal: Proposal, now: int, token: SignedToken | None = None,
                reason: str | None = None) -> None:

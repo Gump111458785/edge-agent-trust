@@ -2,7 +2,11 @@
 
 本项目研究**面向不可信 Agent 的可验证工具执行授权机制**。以校园虚拟通行为实验场景，假设攻击者能影响 Agent 的输入、知识或配置，甚至控制它提出的工具调用。我们在边缘网关和独立执行器上验证来源、身份、参数、一次性授权及必要的多方审批，检验攻击在何种信任假设下能被挡在业务状态更新之前。
 
-**项目状态**　A 的预约服务、独立执行器和本地状态评测，以及 C 的签名发布和可信 RAG 已合入 `main`。Dify Cloud 已用百炼 Qwen 跑通 Mock 和 SQLite 测试预约查询。D 在 `feat/d-evidence-gateway` 实现授权网关。本分支已用真实双组织 Fabric 和 A 的 SQLite 执行器验证 B 的审批、撤销、发布和日志存证。[B 的交付记录](docs/b-fabric-approvals.md)
+**项目状态**　A–D 的核心实现已合入主线。已记录真实 Fabric 的后端联合冒烟，Dify Cloud 已验收真实只读预约。集成版本提供独立访客确认、Fabric 部署配置、发布检查点及实际日志存证入口。云端写入与外部知识库仍需在统一部署环境复验。
+
+[部署与验收](docs/integration.md) · [A](docs/a-work-summary.md) · [B](docs/b-fabric-approvals.md) · [C](docs/c-work-summary.md) · [D](docs/d-work-summary.md) · [E](docs/e-work-summary.md)
+
+[边界实验](evaluation/results/README.md)复现了 600 次原对照，另外用同一套情形做了 120 次确认复测。访客只查预约时，写入由 9/20 降至 0/20。合法申请首次成功 15/30，因令牌过期或预约版本变更被拒的 12 笔在重签后恢复。
 
 ## 快速开始
 
@@ -167,7 +171,7 @@ A–D 各自承担本模块攻防实验。A 负责业务工具和端到端集成
 2. 从 `main` 创建工作分支。可按模块命名，例如 `feat/a-booking-api` 或 `feat/d-token-guard`。外部贡献者可以从 Fork 提交。
 3. 向 `main` 提交 Pull Request，关联 Issue，说明改动范围和复现步骤，并附对应测试或实验记录。涉及接口变更时，请上下游模块成员共同审阅。
 
-A 与 E 已跑通只读预约查询。接下来按接口契约联通 D 的策略与令牌服务、C 的签名配置和 B 的 Fabric 审批，运行端到端对照。复现材料使用模拟数据、示例配置和可重新生成的测试身份。
+A 与 E 已跑通云端只读预约查询，B 记录了 C、D、A 与真链的联合冒烟。新增的统一启动配置和确认页可以用合成数据做本地完整写入，云端写入验收见部署文档。
 
 ## 最终交付
 
@@ -205,4 +209,4 @@ A 与 E 已跑通只读预约查询。接下来按接口契约联通 D 的策略
 - [D 工作说明](docs/d-work-summary.md)
 - [D 接口、配置与本地联调](docs/d-interface-contract.md)
 
-真实 Fabric 审批、Dify 会话传播和日志链上锚定仍需后续接入。
+D 已有 Fabric 配置入口。对外的 Agent 工具使用绑定演示会话的待确认申请，具体配置见[部署与验收](docs/integration.md)。

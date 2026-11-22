@@ -1,0 +1,30 @@
+name: Campus authorization regression
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: python -m pip install -r gateway/requirements-dev.txt -r trusted_release/requirements-test.txt
+      - run: python -m pytest -q business/tests gateway/tests trusted_release/tests role_b/tests agent/test_edge.py
+      - run: node --test role_b/tests/ledger.test.js
+      - run: python -m evaluation.run_benchmark
+      - run: python -m evaluation.run_boundary
+      - uses: actions/upload-artifact@v4
+        with:
+          name: campus-evaluation
+          path: role-a-results/*.json

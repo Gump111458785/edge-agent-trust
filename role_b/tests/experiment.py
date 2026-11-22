@@ -5,6 +5,7 @@ import base64
 from dataclasses import dataclass, replace
 import json
 from pathlib import Path
+from statistics import median, quantiles
 from tempfile import TemporaryDirectory
 from time import perf_counter, sleep, time
 from uuid import uuid4
@@ -92,8 +93,17 @@ def check_case(results, label, source, operation, digest, expected, *, minutes=1
         with write_transaction(path) as connection:
             session = create_session(connection, "V003", lab.now)
         required = frozenset({"security"}) if single else frozenset(APPROVERS)
+        class TimedApprovalSource:
+            returned_at = None
+
+            def fetch_verified(self, reference):
+                state = source.fetch_verified(reference)
+                self.returned_at = perf_counter()
+                return state
+
+        timed_source = TimedApprovalSource()
         executor = Executor(path, TokenVerifier(ISSUER, AUDIENCE, {KEY_ID: lab.key.public_key()}),
-                            approvals=ApprovalVerifier(source, required), evidence_required=False, clock=now)
+                            approvals=ApprovalVerifier(timed_source, required), evidence_required=False, clock=now)
 
         def execute(token_id):
             lab.now = now()
@@ -106,12 +116,15 @@ def check_case(results, label, source, operation, digest, expected, *, minutes=1
                 outcome = executor.execute(request, session["session_token"])["status"]
             except Rejected as error:
                 outcome = error.code
-            return outcome, round((perf_counter() - start) * 1000, 3)
+            finished = perf_counter()
+            window_ms = (round((finished - timed_source.returned_at) * 1000, 3)
+                         if outcome == "executed" else None)
+            return outcome, round((finished - start) * 1000, 3), window_ms
 
-        outcome, elapsed = execute("first")
+        outcome, elapsed, window_ms = execute("first")
         require(outcome == expected, f"{label}: expected {expected}, got {outcome}")
         if replay:
-            replay_result, replay_ms = execute("second")
+            replay_result, replay_ms, _ = execute("second")
             require(replay_result == "AUTHORIZATION_REPLAY", f"{label}: wrong replay result {replay_result}")
             results.append({"case": "fabric_new_token_same_operation", "result": replay_result, "ms": replay_ms})
         with connect(path, readonly=True) as connection:
@@ -122,10 +135,11 @@ def check_case(results, label, source, operation, digest, expected, *, minutes=1
                 "SELECT COUNT(*) FROM used_tokens WHERE operation_id = ?", (operation,)
             ).fetchone()[0]
         require(grants == consumed == int(outcome == "executed"), f"{label}: unexpected SQLite state")
-        results.append({"case": label, "result": outcome, "grants": grants, "consumed": consumed, "ms": elapsed})
+        results.append({"case": label, "result": outcome, "grants": grants, "consumed": consumed,
+                        "ms": elapsed, "approval_read_to_commit_upper_ms": window_ms})
 
 
-def run(work: Path):
+def run(work: Path, repeat: int):
     source = FabricApprovalSource.from_config(work / "reader.json")
     # The first read may coincide with both peers starting their chaincode containers.
     for attempt in range(6):
@@ -165,6 +179,20 @@ def run(work: Path):
     local = LocalApprovalSource(approved, source)
     check_case(results, "local_normal", local, operation, digest, "executed")
     check_case(results, "fabric_normal", source, operation, digest, "executed", replay=True)
+    latency = {}
+    for label, adapter in [("local", local), ("fabric", source)]:
+        samples = []
+        for index in range(repeat):
+            check_case(samples, f"{label}-{index + 1}", adapter, operation, digest, "executed")
+        times = [sample["ms"] for sample in samples]
+        if times:
+            windows = [sample["approval_read_to_commit_upper_ms"] for sample in samples]
+            latency[label] = {"samples_ms": times, "p50_ms": median(times),
+                              "p95_ms": quantiles(times, n=20, method="inclusive")[18],
+                              "approval_read_to_commit_upper_ms": windows,
+                              "approval_read_to_commit_upper_p95_ms":
+                                  quantiles(windows, n=20, method="inclusive")[18]}
+
     check_case(results, "local_digest_mismatch", local, operation, digest, "APPROVAL_MISMATCH", minutes=16)
     check_case(results, "fabric_digest_mismatch", source, operation, digest, "APPROVAL_MISMATCH", minutes=16)
     revoked = operators["security"].submit("RevokeApproval", digest)["value"]
@@ -187,15 +215,18 @@ def run(work: Path):
     require(not verify_audit(source.client, operation, 1, events[:-1]), "truncated log accepted")
     changed = [*events[:-1], {"seq": 3, "event": "changed"}]
     require(not verify_audit(source.client, operation, 1, changed), "altered log accepted")
-    print(json.dumps({"approval_cases": results, "release_anchor": "passed", "audit_anchor": "passed"}, indent=2))
+    print(json.dumps({"approval_cases": results, "latency": latency, "release_anchor": "passed", "audit_anchor": "passed"}, indent=2))
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("work", type=Path)
     parser.add_argument("--prepare", type=Path, metavar="TEST_NETWORK")
+    parser.add_argument("--repeat", type=int, default=0, help="Extra samples per approval source (2–40)")
     args = parser.parse_args()
+    if args.repeat not in {0, *range(2, 41)}:
+        parser.error("--repeat must be 0 or 2–40")
     if args.prepare:
         prepare(args.prepare.resolve(), args.work.resolve())
     else:
-        run(args.work.resolve())
+        run(args.work.resolve(), args.repeat)

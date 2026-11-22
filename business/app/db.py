@@ -39,7 +39,10 @@ def initialize(path: Path) -> None:
         version = conn.execute('PRAGMA user_version').fetchone()[0]
         if version == 0:
             conn.executescript(migration.read_text(encoding='utf-8'))
-        elif version != 1:
+            version = 1
+        if version == 1:
+            conn.executescript(migration.with_name('002_confirmations.sql').read_text(encoding='utf-8'))
+        elif version != 2:
             raise ValueError(f'Unsupported schema version: {version}')
 
 

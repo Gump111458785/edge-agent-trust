@@ -9,6 +9,7 @@ from fastapi import Depends
 
 from business.app.main import (Credentials, SessionHeader, make_app, require_service,
                                required_secret)
+from business.app.authorization import ApprovalVerifier
 from business.app.schemas import ExecuteRequest
 from trusted_release.handoff import open_store
 
@@ -54,12 +55,18 @@ def create_app():
     store = open_store(Path(os.environ['ROLE_C_TRUST_CONFIG']))
     facts_key = required_secret('ROLE_A_FACTS_KEY')
     service_key = required_secret('ROLE_D_SERVICE_KEY')
+    approvals = ApprovalVerifier()
+    if config := os.environ.get('ROLE_D_FABRIC_CONFIG'):
+        from role_b.approval import FabricApprovalSource
+
+        approvals = ApprovalVerifier(source=FabricApprovalSource.from_config(Path(config)))
     client = httpx.Client(base_url=facts_url, timeout=5, trust_env=False)
     try:
         gateway = Gateway(
             FactsClient(client, facts_key), store, key,
             DecisionLog(Path(os.environ.get('ROLE_D_AUDIT_DB', 'gateway/data/decisions.sqlite3'))),
             executor_url + '/internal/executor/access-grants',
+            approvals=approvals,
             issuer=os.environ.get('ROLE_A_ISSUER', 'role-d'),
             audience=os.environ.get('ROLE_A_AUDIENCE', 'role-a-executor'),
             key_id=os.environ.get('ROLE_A_KEY_ID', 'role-d-v1'),
